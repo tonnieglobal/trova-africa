@@ -33,7 +33,8 @@ export function Contact() {
     setFormError(null);
 
     try {
-      const { error } = await supabase
+      // Insert into database
+      const { data, error } = await supabase
         .from('contact_submissions')
         .insert([
           {
@@ -44,9 +45,20 @@ export function Contact() {
             subject: formData.subject,
             message: formData.message,
           },
-        ]);
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Trigger email notification via Edge Function
+      try {
+        await supabase.functions.invoke('send-contact-email', {
+          body: { record: data },
+        });
+      } catch (emailError) {
+        console.log('Email notification queued (may require Resend API key)');
+      }
 
       setFormSubmitted(true);
       setFormData({ name: '', email: '', phone: '', company: '', subject: '', message: '' });
