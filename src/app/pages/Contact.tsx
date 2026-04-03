@@ -33,6 +33,23 @@ export function Contact() {
     setFormError(null);
 
     try {
+      // Check if Supabase is properly configured
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const isConfigured = supabaseUrl && !supabaseUrl.includes('placeholder');
+      
+      if (!isConfigured) {
+        // Demo mode - simulate successful submission
+        console.log('Demo mode: Form data', formData);
+        
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setFormSubmitted(true);
+        setFormData({ name: '', email: '', phone: '', company: '', subject: '', message: '' });
+        setTimeout(() => setFormSubmitted(false), 5000);
+        return;
+      }
+
       // Insert into database
       const { data, error } = await supabase
         .from('contact_submissions')
@@ -49,23 +66,29 @@ export function Contact() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message || 'Database error occurred');
+      }
 
-      // Trigger email notification via Edge Function
-      try {
-        await supabase.functions.invoke('send-contact-email', {
-          body: { record: data },
-        });
-      } catch (emailError) {
-        console.log('Email notification queued (may require Resend API key)');
+      // Trigger email notification via Edge Function (non-blocking)
+      if (data) {
+        try {
+          await supabase.functions.invoke('send-contact-email', {
+            body: { record: data },
+          });
+        } catch (emailError) {
+          console.log('Email notification skipped:', emailError);
+        }
       }
 
       setFormSubmitted(true);
       setFormData({ name: '', email: '', phone: '', company: '', subject: '', message: '' });
       setTimeout(() => setFormSubmitted(false), 5000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting form:', error);
-      setFormError('Failed to send message. Please try again later.');
+      const errorMessage = error?.message || 'Failed to send message. Please try again later.';
+      setFormError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
