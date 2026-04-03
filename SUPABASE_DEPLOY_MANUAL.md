@@ -152,14 +152,28 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 -- Create function to handle new submissions
 CREATE OR REPLACE FUNCTION public.handle_new_contact_submission()
 RETURNS TRIGGER AS $$
+DECLARE
+  service_key TEXT;
 BEGIN
+  -- Get service role key safely
+  BEGIN
+    service_key := current_setting('app.settings.service_role_key', true);
+  EXCEPTION WHEN OTHERS THEN
+    service_key := NULL;
+  END;
+  
+  -- Skip if no service key available
+  IF service_key IS NULL OR service_key = '' THEN
+    RETURN NEW;
+  END IF;
+  
   -- Call the Edge Function
   PERFORM
     net.http_post(
       url := 'https://gyxggorprbulocjmwhgy.supabase.co/functions/v1/send-contact-email',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', CONCAT('Bearer ', current_setting('app.settings.service_role_key', true))
+        'Authorization', 'Bearer ' || service_key
       ),
       body := jsonb_build_object('record', row_to_json(NEW))
     );

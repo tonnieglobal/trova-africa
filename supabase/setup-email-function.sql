@@ -9,8 +9,20 @@ CREATE OR REPLACE FUNCTION public.handle_new_contact_submission()
 RETURNS TRIGGER AS $$
 DECLARE
   supabase_url TEXT := 'https://gyxggorprbulocjmwhgy.supabase.co';
-  service_key TEXT := current_setting('app.settings.service_role_key', true);
+  service_key TEXT;
 BEGIN
+  -- Get service role key safely
+  BEGIN
+    service_key := current_setting('app.settings.service_role_key', true);
+  EXCEPTION WHEN OTHERS THEN
+    service_key := NULL;
+  END;
+  
+  -- Skip if no service key available
+  IF service_key IS NULL OR service_key = '' THEN
+    RETURN NEW;
+  END IF;
+  
   -- Call the Edge Function to send emails
   PERFORM
     net.http_post(
